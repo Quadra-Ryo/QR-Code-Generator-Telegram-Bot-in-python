@@ -1,4 +1,4 @@
 An easy Telegram BOT, 
 Funcions:
-- Calling external API and handling the datas
+- Returning the QR Code of a given string/link
 - Message handling
