@@ -1,11 +1,15 @@
 from typing import Final
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import qrcode
+from PIL import Image
+import os
+import shutil
 
 #Bot variables
 TOKEN: Final = "Not gonna tell you the token" #Father bot token
 BOT_USERNAME: Final = "@AsdyraBot" #Bot username
-users = {} #hasmap to let multiple user use the bot at the same time
+users = {} #hasmap to let multiple user use the bot at the same time, the values of the hash map are CLIENT_ID = [FLAG, R1, G1, B1, R2, G2, B2,Custom1 FLAG, Custom2 Flag, TRASPARENT FLAG]
 
 #Commands
 async def start_command(update:Update, context: ContextTypes.DEFAULT_TYPE):
@@ -13,8 +17,11 @@ async def start_command(update:Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update:Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("This is a simple Telegram bot that enables you to create QR Codes online, here is the command list:\n"+
-                                    "1- /colors - Return the list of implemented colors of the Bot\n"+
-                                    "2- /generateQR - The bot will send you the QR Code you need after reading your inputs") 
+                                    "1- /help - Return the list of commands\n"+
+                                    "2- /colors - Return the list of implemented colors of the Bot\n"+
+                                    "3- /generateQR - The bot will send you the QR Code you need after reading your inputs"+
+                                    "4- /custom1 - Sending a message with the R;G;B values you'll be able to choose a custom color and calling custom1 you'll be able to set the background/code color to your custom color"+
+                                    "4- /custom2 - Sending a message with the R;G;B values you'll be able to choose a custom color and calling custom2 you'll be able to set the background/code color to your custom color")  
 
 async def colors_command(update:Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("You can choose between different colors for the code and the background:\n"+
@@ -25,18 +32,29 @@ async def colors_command(update:Update, context: ContextTypes.DEFAULT_TYPE):
                                     "\t-Orange\n"+
                                     "\t-Black\n"+
                                     "\t-White\n"+
-                                    "\t-Transparent (only for Background)\n"+
-                                    "You can also")
+                                    "\t-Transparent (only for Background)"+
+                                    "You can also write \"custom1\" or \"custom2\" to use the custom color if set, if you don't have set them you can set them with the command \\custom1 and \\custom2")
     
 async def generateQR_command(update:Update, context: ContextTypes.DEFAULT_TYPE):
     users[update.message.chat.id] = 1 #setting the flag of the user who wants to create a QR Code to 1
-    await update.message.reply_text("Write the link or datas you want to convert followed by the code color and the background color (DATAS, CODE COLOR, BG COLOR)\nCopy the following message to make the process faster")
-    await update.message.reply_text("http://,Black,Transparent")
+    await update.message.reply_text("Write the link or datas you want to convert followed by the code color and the background color (DATAS, CODE COLOR, BG COLOR) the background color can be trasparent, to have a list of the colors you can use digit \\color \nCopy the following message to make the process faster")
+    await update.message.reply_text("QRDATAS, CodeCOlor, BgColor")
+
+
+async def custom1_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    users[update.message.chat.id] = [False,-1,-1,-1,-1,-1,-1, True, False, False]
+    await update.message.reply_text("Write the RGB values separeted by a comma (R,G,B), the values must go from 0 to 255\n"+
+                                    "You can call the custom color by writing \"custom2\" instead of a color in the command \\gereateQR")
+
+async def custom2_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    users[update.message.chat.id] = [False,-1,-1,-1,-1,-1,-1, False, True, False]
+    await update.message.reply_text("Write the RGB values separeted by a comma (R,G,B), the values must go from 0 to 255\n"+
+                                    "You can call the custom color by writing \"custom2\" instead of a color in the command \\gereateQR")
 
 #Responses
 def handle_Response(update: Update,text: str) -> str:
-
-    if users.get(update.message.chat.id) == 1:
+    userFlag = users.get(update.message.chat.id)
+    if userFlag[0] == True:
         #handling the input
         data = text.split(',')
         qrDatas = data[0]
@@ -45,26 +63,36 @@ def handle_Response(update: Update,text: str) -> str:
         qrDatas = qrDatas.lower
         codeColor = codeColor.capitalize
         bgColor = bgColor.capitalize
+        effCodeColor = colorHandling(update, codeColor) #the effective RGB datas of the code in an array
+        effBgColor = colorHandling(update, bgColor) #the effective RGB datas of the background in an array
 
-def colorHandling(color:str): #given the color name returning the RGB Values
+def colorHandling(update: Update,color:str): #given the color name returning the RGB Values
+    color = color.capitalize
+
     match color:
         case "Blue":
-            return [25, 47, 88, "false"]
+            return [25, 47, 88, False] #returning the RGB values and the transparent flag
         case "Green":
-            return [34, 139, 34, "false"]
+            return [34, 139, 34, False]
         case "Red":
-            return [220, 20, 60, "false"]
+            return [220, 20, 60, False]
         case "Pink":
-            return [255, 182, 193, "false"]
+            return [255, 182, 193, False]
         case "Orange":
-            return [255, 127, 80, "false"]
+            return [255, 127, 80, False]
         case "Black":
-            return [0, 0, 0, "false"]
+            return [0, 0, 0, False]
         case "White":
-            return [255, 255, 255, "false"]
-        case"Transparent":
-            return [255, 255, 255, "true"]
-        
+            return [255, 255, 255, False]
+        case "Transparent":
+            return [255, 255, 255, True]
+        case "custom1":
+            userData = users.get(update.message.chat.id) #getting all the values in the hashmap of the user
+            return [userData[1], userData[2], userData[3], False]
+        case "Custom2":
+            userData = users.get(update.message.chat.id)
+            return [userData[4], userData[5], userData[6], False]
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_type: str = update.message.chat.type #group chat or single chat
     text: str = update.message.text #input message
@@ -72,7 +100,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f'User ({update.message.chat.id}) in {message_type}: "{text}"') #Console debug 
 
     if not(update.message.chat.id in users): #if the message is the first message of the user I add him to the hashmap and I set the command flag to 0
-        users[update.message.chat.id] = 0
+        users[update.message.chat.id] = [False,-1,-1,-1,-1,-1,-1,False,False,False]
     
     if message_type == 'group': #if the bot is called in a group
         if BOT_USERNAME in text:
@@ -86,6 +114,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(response)
     await update.message.reply_text(response)
 
+#QR code generation
 
 #Error handler
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
